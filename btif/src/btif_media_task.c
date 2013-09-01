@@ -153,8 +153,8 @@ enum {
 #define BTIF_MEDIA_BITRATE_STEP 5
 #endif
 
-/* High quality setting @ 44.1 khz */
-#define DEFAULT_SBC_BITRATE 328
+/* High quality setting @ 48 khz */
+#define DEFAULT_SBC_BITRATE 384
 
 #ifndef A2DP_MEDIA_TASK_STACK_SIZE
 #define A2DP_MEDIA_TASK_STACK_SIZE       0x2000         /* In bytes */
