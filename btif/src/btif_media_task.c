@@ -29,6 +29,7 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -156,6 +157,15 @@ enum {
 /* Middle quality quality setting @ 48 khz */
 #define DEFAULT_SBC_BITRATE 237
 #define SBC_HIGH_QUALITY_BITRATE 345
+
+/* Config file for user customizeable bitpool! */
+#define A2DP_CONF_FILE  "/etc/bluetooth/a2dp_bitpool.conf"
+#define MAXIMUM_FORCED_BITPOOL "MaximumSupportedBitpool"
+#define USER_DEFINED_BITRATE "DesiredBitRate"
+#define A2DP_CONF_SPACE ' '
+#define A2DP_CONF_COMMENT '#'
+#define A2DP_CONF_KEY_VAL_DELIMETER "="
+#define BTIF_STORAGE_MAX_LINE_SZ 100
 
 #ifndef A2DP_MEDIA_TASK_STACK_SIZE
 #define A2DP_MEDIA_TASK_STACK_SIZE       0x2000         /* In bytes */
@@ -1469,6 +1479,65 @@ static void btif_media_task_aa_tx_flush(BT_HDR *p_msg)
 }
 
 /*******************************************************************************
+**
+** Function         bt_a2dp_user_bitpool
+**
+** Description      Loads user customizeable bitpool!
+**
+** Returns          value if the bitpool is successfully populated
+**                  0 otherwise
+**
+*******************************************************************************/
+
+int bt_a2dp_user_bitpool(char *a)
+{
+    char *key_name, *key_value;
+    int i=0,result;
+    char linebuf[BTIF_STORAGE_MAX_LINE_SZ];
+    char *line,**ptr;
+    FILE *fp;
+
+        /* first time loading of auto pair blacklist configuration  */
+
+        fp = fopen (A2DP_CONF_FILE, "r");
+
+        if (fp == NULL)
+        {
+            APPL_TRACE_EVENT2("%s: Failed to open A2DP bitpool conf file at %s", __FUNCTION__,A2DP_CONF_FILE );
+            return 0;
+        }
+
+        /* read through a2dp_bitrate.conf file to retrieve desired values */
+        while (fgets(linebuf, BTIF_STORAGE_MAX_LINE_SZ, fp) != NULL)
+        {
+            /* strip  leading white spaces */
+            while (linebuf[i] == A2DP_CONF_SPACE)
+                i++;
+
+            /* skip  commented lines */
+            if (linebuf[i] == A2DP_CONF_COMMENT)
+                continue;
+
+            line = (char*)&(linebuf[i]);
+
+            if (line == NULL)
+                continue;
+
+            key_name = strtok_r(line, A2DP_CONF_KEY_VAL_DELIMETER, &key_value);
+            if (key_name == NULL)
+                continue;
+      if (strcmp(key_name,a)==0) {
+    result = strtol(key_value,ptr,10);
+    break;
+      } else {
+    result = 0;
+      }
+  }
+        fclose(fp);
+    return result;
+} 
+
+/*******************************************************************************
  **
  ** Function       btif_media_task_enc_init
  **
@@ -1479,6 +1548,8 @@ static void btif_media_task_aa_tx_flush(BT_HDR *p_msg)
  *******************************************************************************/
 static void btif_media_task_enc_init(BT_HDR *p_msg)
 {
+    char rateVal[40];
+    int USER_BITRATE = bt_a2dp_user_bitpool(strcpy(rateVal,USER_DEFINED_BITRATE));
     tBTIF_MEDIA_INIT_AUDIO *pInitAudio = (tBTIF_MEDIA_INIT_AUDIO *) p_msg;
 
     APPL_TRACE_DEBUG0("btif_media_task_enc_init");
@@ -1492,8 +1563,14 @@ static void btif_media_task_enc_init(BT_HDR *p_msg)
     btif_media_cb.encoder.s16AllocationMethod = pInitAudio->AllocationMethod;
     btif_media_cb.encoder.s16SamplingFreq = pInitAudio->SamplingFreq;
 
-    btif_media_cb.encoder.u16BitRate = btif_media_cb.is_edr_supported ?
-                                    SBC_HIGH_QUALITY_BITRATE : DEFAULT_SBC_BITRATE;
+    /* check to see if bitpool settings have been overridden by conf file */
+    if (USER_BITRATE != 0) {
+	btif_media_cb.encoder.u16BitRate = USER_BITRATE;
+    } else {
+	btif_media_cb.encoder.u16BitRate = btif_media_cb.is_edr_supported ?
+                                  	SBC_HIGH_QUALITY_BITRATE : DEFAULT_SBC_BITRATE;
+    } 
+
     /* Default transcoding is PCM to SBC, modified by feeding configuration */
     btif_media_cb.TxTranscoding = BTIF_MEDIA_TRSCD_PCM_2_SBC;
     btif_media_cb.TxAaMtuSize = ((BTIF_MEDIA_AA_BUF_SIZE-BTIF_MEDIA_AA_SBC_OFFSET-sizeof(BT_HDR))
@@ -1525,6 +1602,10 @@ static void btif_media_task_enc_init(BT_HDR *p_msg)
 
 static void btif_media_task_enc_update(BT_HDR *p_msg)
 {
+    char rateVal[40];
+    char poolVal[40];
+    int USER_BITRATE = bt_a2dp_user_bitpool(strcpy(rateVal,USER_DEFINED_BITRATE));
+    int USER_MAXPOOL = bt_a2dp_user_bitpool(strcpy(poolVal, MAXIMUM_FORCED_BITPOOL));
     tBTIF_MEDIA_UPDATE_AUDIO * pUpdateAudio = (tBTIF_MEDIA_UPDATE_AUDIO *) p_msg;
     SBC_ENC_PARAMS *pstrEncParams = &btif_media_cb.encoder;
     UINT16 s16SamplingFreq;
@@ -1545,8 +1626,13 @@ static void btif_media_task_enc_update(BT_HDR *p_msg)
                 - sizeof(BT_HDR)) : pUpdateAudio->MinMtuSize;
 
         /* Set the initial target bit rate */
-        pstrEncParams->u16BitRate = btif_media_cb.is_edr_supported ?
-                                    SBC_HIGH_QUALITY_BITRATE : DEFAULT_SBC_BITRATE;
+        /*check if default bitpool values have been overridden by conf file*/
+	if (USER_BITRATE != 0) {  
+		pstrEncParams->u16BitRate = USER_BITRATE;
+	} else {
+	        pstrEncParams->u16BitRate = btif_media_cb.is_edr_supported ?
+  	                                  SBC_HIGH_QUALITY_BITRATE : DEFAULT_SBC_BITRATE;
+	} 	
 
         if (pstrEncParams->s16SamplingFreq == SBC_sf16000)
             s16SamplingFreq = 16000;
@@ -1609,8 +1695,11 @@ static void btif_media_task_enc_update(BT_HDR *p_msg)
 
             APPL_TRACE_EVENT2("bitpool candidate : %d (%d kbps)",
                          s16BitPool, pstrEncParams->u16BitRate);
-
-            if (s16BitPool > pUpdateAudio->MaxBitPool)
+     	    /* check if default max bitpool has been overridden by conf file */
+	    if (USER_MAXPOOL == 0) {
+	        USER_MAXPOOL = pUpdateAudio->MaxBitPool;
+	    }
+	    if (s16BitPool > USER_MAXPOOL) 
             {
                 APPL_TRACE_DEBUG1("btif_media_task_enc_update computed bitpool too large (%d)",
                                     s16BitPool);
