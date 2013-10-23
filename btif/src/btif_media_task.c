@@ -154,8 +154,8 @@ enum {
 #define BTIF_MEDIA_BITRATE_STEP 5
 #endif
 
-/* Middle quality quality setting @ 48 khz */
-#define DEFAULT_SBC_BITRATE 237
+/* High quality quality setting @ 48 khz */
+#define DEFAULT_SBC_BITRATE 328
 #define SBC_HIGH_QUALITY_BITRATE 345
 
 /* Config file for user customizeable bitpool! */
@@ -472,6 +472,14 @@ static void btif_recv_ctrl_data(void)
             {
                 a2dp_cmd_acknowledge(A2DP_CTRL_ACK_FAILURE);
             }
+            break;
+
+        case A2DP_CTRL_CMD_CHECK_STREAM_STARTED:
+
+            if((btif_av_stream_started_ready() == TRUE))
+                a2dp_cmd_acknowledge(A2DP_CTRL_ACK_SUCCESS);
+            else
+                a2dp_cmd_acknowledge(A2DP_CTRL_ACK_FAILURE);
             break;
 
         case A2DP_CTRL_CMD_START:

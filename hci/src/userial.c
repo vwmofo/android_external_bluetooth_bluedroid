@@ -276,13 +276,12 @@ static void *userial_read_thread(void *arg)
             continue;
         }
 
-
         if (rx_length > 0)
         {
             p_buf->len = (uint16_t)rx_length;
             utils_enqueue(&(userial_cb.rx_q), p_buf);
 
-#if (USERIAL_IBS_ENABLED == TRUE)
+#ifdef QCOM_BT_SIBS_ENABLE
             /* Check if received data is IBS data or not */
             is_recvd_data_signal(&p[0]);
 #endif
@@ -561,7 +560,6 @@ void userial_ioctl(userial_ioctl_op_t op, void *p_data)
                 send_wakeup_signal(USERIAL_RX_FLOW_OFF);
             break;
 
-#if (USERIAL_IBS_ENABLED == TRUE)
         case USERIAL_OP_CLK_ON:
             ioctl(userial_cb.fd, 13);
             break;
@@ -569,7 +567,6 @@ void userial_ioctl(userial_ioctl_op_t op, void *p_data)
         case USERIAL_OP_CLK_OFF:
             ioctl(userial_cb.fd, 14);
             break;
-#endif
 
         case USERIAL_OP_INIT:
         default:
